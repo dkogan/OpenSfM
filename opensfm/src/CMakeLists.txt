@@ -112,10 +112,10 @@ if(TARGET opencv_imgcodecs)
 endif()
 
 ####### Third party libraries #######
-add_subdirectory(third_party/pybind11)
 add_subdirectory(third_party/akaze)
 add_subdirectory(third_party/vlfeat)
 
+find_package(pybind11 REQUIRED)
 include_directories(third_party/vlfeat)
 
 ####### Debugging #######
