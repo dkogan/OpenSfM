@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, IO, Union
 
@@ -184,7 +185,12 @@ class OpenSfMConfig:
     matching_use_filters: bool = False
     # Use segmentation information (if available) to improve matching
     matching_use_segmentation: bool = False
-
+    # If given, we use THIS altitude value for selecting image pairs to find
+    # matches, instead of computing the altitude estimate ourselves. Useful if
+    # the input GPS or OPK data is incorrect, and find_best_altitude() would
+    # compute a bad value. The defualt value of sys.float_info.max means
+    # "estimate the altitude"
+    matching_force_altitude: float = sys.float_info.max
     ##################################
     # Params for geometric estimation
     ##################################

@@ -1,4 +1,5 @@
 # pyre-strict
+import sys
 import copy
 import logging
 import math
@@ -125,7 +126,8 @@ def find_best_altitude(
 
 
 def get_representative_points(
-    images: List[str], exifs: Dict[str, Any], reference: geo.TopocentricConverter
+    images: List[str], exifs: Dict[str, Any], reference: geo.TopocentricConverter,
+    matching_force_altitude: float = sys.float_info.max
 ) -> Dict[str, NDArray]:
     """Return a topocentric point for each image, that is suited to run distance-based pair selection."""
     origin = {}
@@ -161,8 +163,12 @@ def get_representative_points(
             exif, reference)
 
     if had_orientation:
-        altitude = find_best_altitude(origin, directions)
-        logger.info(f"Altitude for orientation based matching {altitude}")
+        altitude = matching_force_altitude
+        if altitude == sys.float_info.max:
+            altitude = find_best_altitude(origin, directions)
+            logger.info(f"Altitude for orientation based matching was estimated: {altitude}")
+        else:
+            logger.info(f"Altitude for orientation based matching was provided in the 'matching_force_altitude' config: {altitude}")
         directions_scaled = {k: v / DEFAULT_Z *
                              altitude for k, v in directions.items()}
         points = {k: origin[k] + directions_scaled[k] for k in images}
@@ -179,6 +185,7 @@ def match_candidates_by_distance(
     reference: geo.TopocentricConverter,
     max_neighbors: int,
     max_distance: float,
+    matching_force_altitude: float = sys.float_info.max
 ) -> Set[Tuple[str, str]]:
     """Find candidate matching pairs by GPS distance.
 
@@ -196,8 +203,8 @@ def match_candidates_by_distance(
     k = min(len(images_cand), max_neighbors)
 
     representative_points = get_representative_points(
-        images_cand + images_ref, exifs, reference
-    )
+        images_cand + images_ref, exifs, reference,
+        matching_force_altitude = matching_force_altitude)
 
     # we don't want to loose some images because of missing GPS :
     # either ALL of them or NONE of them are used for getting pairs
@@ -246,6 +253,7 @@ def match_candidates_by_graph(
     exifs: Dict[str, Any],
     reference: geo.TopocentricConverter,
     rounds: int,
+    matching_force_altitude: float = sys.float_info.max
 ) -> Set[Tuple[str, str]]:
     """Find by triangulating the GPS points on X/Y axises"""
     if len(images_cand) < 4 or rounds < 1:
@@ -255,7 +263,8 @@ def match_candidates_by_graph(
     images_ref_set: Set[str] = set(images_ref)
     images: List[str] = list(images_cand_set | images_ref_set)
 
-    representative_points = get_representative_points(images, exifs, reference)
+    representative_points = get_representative_points(images, exifs, reference,
+                                                      matching_force_altitude = matching_force_altitude)
 
     points = np.zeros((len(images), 2))
     for i, point in enumerate(representative_points.values()):
@@ -356,7 +365,8 @@ def compute_bow_affinity(
     images using BoW-based distance.
     """
     preempted_candidates, need_load = preempt_candidates(
-        images_ref, images_cand, exifs, reference, max_gps_neighbors, max_gps_distance
+        images_ref, images_cand, exifs, reference, max_gps_neighbors, max_gps_distance,
+        matching_force_altitude = data.config['matching_force_altitude']
     )
 
     # construct BoW histograms
@@ -429,7 +439,8 @@ def compute_vlad_affinity(
     images using VLAD-based distance.
     """
     preempted_candidates, need_load = preempt_candidates(
-        images_ref, images_cand, exifs, reference, max_gps_neighbors, max_gps_distance
+        images_ref, images_cand, exifs, reference, max_gps_neighbors, max_gps_distance,
+        matching_force_altitude = data.config['matching_force_altitude']
     )
 
     if len(preempted_candidates) == 0:
@@ -459,6 +470,7 @@ def preempt_candidates(
     reference: geo.TopocentricConverter,
     max_gps_neighbors: int,
     max_gps_distance: float,
+    matching_force_altitude: float = sys.float_info.max
 ) -> Tuple[Dict[str, List[str]], Set[str]]:
     """Preempt candidates using GPS to reduce set of images
     from which to load data to save RAM.
@@ -474,6 +486,7 @@ def preempt_candidates(
             reference,
             max_gps_neighbors,
             max_gps_distance,
+            matching_force_altitude = matching_force_altitude
         )
         preempted_cand = defaultdict(list)
         for p in gps_pairs:
@@ -666,10 +679,12 @@ def match_candidates_from_metadata(
                  for i in images_ref for j in images_cand if i != j}
     else:
         d = match_candidates_by_distance(
-            images_ref, images_cand, exifs, reference, gps_neighbors, max_distance
+            images_ref, images_cand, exifs, reference, gps_neighbors, max_distance,
+            matching_force_altitude = data.config['matching_force_altitude']
         )
         g = match_candidates_by_graph(
-            images_ref, images_cand, exifs, reference, graph_rounds
+            images_ref, images_cand, exifs, reference, graph_rounds,
+            matching_force_altitude = data.config['matching_force_altitude']
         )
         t = match_candidates_by_time(
             images_ref, images_cand, exifs, time_neighbors)
