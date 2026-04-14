@@ -1702,8 +1702,15 @@ def triangulation_reconstruction(
         overidden_bias_config["bundle_compensate_gps_bias"] = False
         config = overidden_bias_config
 
-    bundle(reconstruction, camera_priors,
-           rig_camera_priors, gcp, bundle_grid, config)
+    report_bundle = \
+        bundle(reconstruction, camera_priors,
+               rig_camera_priors, gcp, bundle_grid, config)
+    if not (report_bundle['is_solution_usable'] and \
+            report_bundle['termination_type'] == 'CONVERGENCE'):
+
+        logger.info(report_bundle['full_report'])
+        raise Exception("Bundle-adjustment solution unreliable. Quitting")
+
     remove_outliers(reconstruction, config_override)
 
     if config["filter_final_point_cloud"]:
